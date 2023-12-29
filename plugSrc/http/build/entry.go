@@ -3,12 +3,15 @@ package build
 import (
 	"github.com/google/gopacket"
 	"io"
-	"log"
 	"strconv"
 	"fmt"
 	"os"
 	"bufio"
 	"net/http"
+	"net/http/httputil"
+	"time"
+
+	"github.com/google/gopacket/tcpassembly/tcpreader"
 )
 
 const (
@@ -38,30 +41,10 @@ func NewInstance() *H {
 }
 
 func (m *H) ResolveStream(net, transport gopacket.Flow, buf io.Reader) {
-
-	bio := bufio.NewReader(buf)
-	for {
-		req, err := http.ReadRequest(bio)
-
-		if err == io.EOF {
-			return
-		} else if err != nil {
-			continue
-		} else {
-
-			var msg = "["
-			msg += req.Method
-			msg += "] ["
-			msg += req.Host + req.URL.String()
-			msg += "] ["
-			req.ParseForm()
-			msg += req.Form.Encode()
-			msg += "]"
-
-			log.Println(msg)
-
-			req.Body.Close()
-		}
+	if transport.Src().String() == strconv.Itoa(m.port) {
+		resolveServerPacket(net, transport, buf)
+	} else {
+		resolveClientPacket(net, transport, buf)
 	}
 }
 
@@ -102,5 +85,63 @@ func (m *H) SetFlag(flg []string)  {
 		default:
 			panic("ERR : mysql's params")
 		}
+	}
+}
+
+func resolveServerPacket(net, transport gopacket.Flow, r io.Reader) {
+	defer tcpreader.DiscardBytesToEOF(r)
+	buf := bufio.NewReader(r)
+	for {
+		resp, err := http.ReadResponse(buf, nil)
+		fmt.Printf("\n%s %s:%s->%s:%s\n", time.Now().Format("2006-01-02 15:04:05.000000"), net.Src().String(), transport.Src().String(), net.Dst().String(), transport.Dst().String())
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			fmt.Println("# End of stream")
+			return
+		} else if err != nil {
+			fmt.Println("# Error reading stream", ":", err)
+			return
+		} else {
+			defer resp.Body.Close()
+			printResponse(net, transport, resp)
+		}
+	}
+}
+
+func resolveClientPacket(net, transport gopacket.Flow, r io.Reader) {
+	defer tcpreader.DiscardBytesToEOF(r)
+	buf := bufio.NewReader(r)
+	for {
+		req, err := http.ReadRequest(buf)
+		fmt.Printf("\n%s %s:%s->%s:%s\n", time.Now().Format("2006-01-02 15:04:05.000000"), net.Src().String(), transport.Src().String(), net.Dst().String(), transport.Dst().String())
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			fmt.Println("# End of stream")
+			return
+		} else if err != nil {
+			fmt.Println("# Error reading stream", ":", err)
+			return
+		} else {
+			defer req.Body.Close()
+			printRequest(net, transport, req)
+		}
+	}
+}
+
+func printRequest(net, transport gopacket.Flow, req *http.Request) {
+	dump, err := httputil.DumpRequest(req, true)
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		s := string(dump)
+		fmt.Println(s)
+	}
+}
+
+func printResponse(net, transport gopacket.Flow, resp *http.Response) {
+	dump, err := httputil.DumpResponse(resp, true)
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		s := string(dump)
+		fmt.Println(s)
 	}
 }
