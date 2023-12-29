@@ -92,7 +92,8 @@ func (m *ProtocolStreamFactory) New(net, transport gopacket.Flow) tcpassembly.St
 	}
 
 	//new stream
-	fmt.Println("# Start new stream:", net, transport)
+	fmt.Printf("\n%s %s:%s->%s:%s\n", time.Now().Format("2006-01-02 15:04:05.000000"), net.Src().String(), transport.Src().String(), net.Dst().String(), transport.Dst().String())
+	fmt.Println("# Start new stream")
 
 	//decode packet
 	go m.dispatch.Plug.ResolveStream(net, transport, &(stm.r))
