@@ -22,7 +22,7 @@ func (stmt *Stmt) WriteToText() []byte {
 
 	var buf bytes.Buffer
 
-	str := fmt.Sprintf("Stm id[%d]: '%s';\n", stmt.ID, stmt.Query)
+	str := fmt.Sprintf("Stm id[%d]: %s;\n", stmt.ID, stmt.Query)
 	buf.WriteString(str)
 
 	for i := 0; i < int(stmt.ParamCount); i++ {
