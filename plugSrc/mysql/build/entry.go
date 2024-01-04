@@ -226,7 +226,7 @@ func (stm *stream) findStmtPacket (srv chan *packet, seq int) *packet {
 			if !ok {
 				return nil
 			}
-			if packet.seq == seq%255 {
+			if packet.seq == seq%256 {
 				return packet
 			}
 		case <-time.After(5 * time.Second):
