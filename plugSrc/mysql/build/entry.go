@@ -289,8 +289,9 @@ func (stm *stream) readResult(seq int, isBinary bool) (msg string) {
 	}
 	seq += 1
 
+	var sb strings.Builder
 	defer func() {
-		msg = packetFlowInfo(serverPacket.net, serverPacket.transport) + msg
+		msg = packetFlowInfo(serverPacket.net, serverPacket.transport) + sb.String()
 	}()
 
 	switch serverPacket.payload[0] {
@@ -304,7 +305,7 @@ func (stm *stream) readResult(seq int, isBinary bool) (msg string) {
 		lastInsertId := int(i)
 
 		f := "%s Effect Row:%s,Last Insert Id:%s"
-		msg += fmt.Sprintf(f, OkPacket, strconv.Itoa(affectedRows), strconv.Itoa(lastInsertId))
+		sb.WriteString(fmt.Sprintf(f, OkPacket, strconv.Itoa(affectedRows), strconv.Itoa(lastInsertId)))
 		return msg
 	case 0xff:
 		// Err
@@ -312,18 +313,18 @@ func (stm *stream) readResult(seq int, isBinary bool) (msg string) {
 		errorMsg, _ := ReadStringFromByte(serverPacket.payload[4:])
 
 		f := "%s Err code:%s,Err msg:%s"
-		msg += fmt.Sprintf(f, ErrorPacket, strconv.Itoa(errorCode), strings.TrimSpace(errorMsg))
+		sb.WriteString(fmt.Sprintf(f, ErrorPacket, strconv.Itoa(errorCode), strings.TrimSpace(errorMsg)))
 		return msg
 	case 0xfb:
 		// Local infile
-		msg += "Local infile unsupported"
+		sb.WriteString("Local infile unsupported")
 		return msg
 	}
 
 	var err error
 	var count uint64
 	if count, err = mp.ParseColumnCount(serverPacket.payload); err != nil {
-		msg += fmt.Sprintf("ERR : Parse column count %+v", err)
+		sb.WriteString(fmt.Sprintf("ERR : Parse column count %+v", err))
 		return msg
 	}
 	columnCount := int(count)
@@ -334,7 +335,7 @@ columnLoop:
 	for {
 		serverPacket := stm.findStmtPacket(stm.packets, seq+1)
 		if serverPacket == nil {
-			msg += "ERR : Not found stm packet"
+			sb.WriteString("ERR : Not found stm packet")
 			return msg
 		}
 		seq += 1
@@ -346,12 +347,12 @@ columnLoop:
 			errorMsg, _ := ReadStringFromByte(serverPacket.payload[4:])
 
 			f := "%s Err code:%s,Err msg:%s"
-			msg += fmt.Sprintf(f, ErrorPacket, strconv.Itoa(errorCode), strings.TrimSpace(errorMsg))
+			sb.WriteString(fmt.Sprintf(f, ErrorPacket, strconv.Itoa(errorCode), strings.TrimSpace(errorMsg)))
 			return msg
 		case 0xfe:
 			// EOF
 			if i != columnCount {
-				msg += fmt.Sprintf("ERR : Column count mismatch n:%d len:%d", columnCount, len(columns))
+				sb.WriteString(fmt.Sprintf("ERR : Column count mismatch n:%d len:%d", columnCount, len(columns)))
 				return msg
 			}
 			break columnLoop
@@ -359,7 +360,7 @@ columnLoop:
 
 		column, err := gm.FieldData(serverPacket.payload).Parse()
 		if err != nil {
-			msg += fmt.Sprintf("ERR : Parse column %+v", err)
+			sb.WriteString(fmt.Sprintf("ERR : Parse column %+v", err))
 			return msg
 		}
 		columns = append(columns, column)
@@ -373,9 +374,9 @@ columnLoop:
 		}
 	}
 
-	msg += fmt.Sprintf("(Column)%d\n", len(columns))
+	sb.WriteString(fmt.Sprintf("(Column)%d\n", len(columns)))
 	for i, v := range columns {
-		msg += fmt.Sprintf("%d) %s\n", i, dumpColumn(v))
+		sb.WriteString(fmt.Sprintf("%d) %s\n", i, dumpColumn(v)))
 	}
 
 	var rows [][]interface{}
@@ -383,7 +384,7 @@ rowLoop:
 	for {
 		serverPacket := stm.findStmtPacket(stm.packets, seq+1)
 		if serverPacket == nil {
-			msg += "ERR : Not found stm packet"
+			sb.WriteString("ERR : Not found stm packet")
 			return msg
 		}
 		seq += 1
@@ -395,7 +396,7 @@ rowLoop:
 			errorMsg, _ := ReadStringFromByte(serverPacket.payload[4:])
 
 			f := "%s Err code:%s,Err msg:%s"
-			msg += fmt.Sprintf(f, ErrorPacket, strconv.Itoa(errorCode), strings.TrimSpace(errorMsg))
+			sb.WriteString(fmt.Sprintf(f, ErrorPacket, strconv.Itoa(errorCode), strings.TrimSpace(errorMsg)))
 			return msg
 		case 0xfe:
 			// EOF
@@ -404,16 +405,16 @@ rowLoop:
 
 		row, err := gm.RowData(serverPacket.payload).Parse(columns, isBinary)
 		if err != nil {
-			msg += fmt.Sprintf("ERR : Parse row %+v", err)
+			sb.WriteString(fmt.Sprintf("ERR : Parse row %+v", err))
 			return msg
 		}
 
 		rows = append(rows, row)
 	}
 
-	msg += fmt.Sprintf("(Row)%d\n", len(rows))
+	sb.WriteString(fmt.Sprintf("(Row)%d\n", len(rows)))
 	for i, v := range rows {
-		msg += fmt.Sprintf("%d) %s\n", i, dumpRow(v))
+		sb.WriteString(fmt.Sprintf("%d) %s\n", i, dumpRow(v)))
 	}
 
 	return msg
@@ -570,6 +571,15 @@ func (stm *stream) resolveClientPacket(packet *packet) {
 		return
 	}
 
-	fmt.Println(msg)
+	r := []rune(msg)
+	l := len(r)
+	for i := 0; i < l; {
+		e := i + 1024
+		if e > l {
+			e = l
+		}
+		fmt.Print(string(r[i:e]))
+		i = e
+	}
+	fmt.Println()
 }
-
